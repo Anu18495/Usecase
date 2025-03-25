@@ -1,0 +1,43 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git 'https://github.com/<your-repo>.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh 'docker build -t my-node-app .'
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withDockerRegistry([credentialsId: 'docker-hub-credentials', url: '']) {
+                    sh 'docker tag my-node-app <your-dockerhub-username>/my-node-app:latest'
+                    sh 'docker push <your-dockerhub-username>/my-node-app:latest'
+                }
+            }
+        }
+
+        stage('Deploy to AWS EC2') {
+            steps {
+                sshagent(['ec2-ssh-key']) {
+                    sh '''
+                    ssh -o StrictHostKeyChecking=no ec2-user@<EC2-Public-IP> <<EOF
+                    docker pull <your-dockerhub-username>/my-node-app:latest
+                    docker stop my-node-app || true
+                    docker rm my-node-app || true
+                    docker run -d --name my-node-app -p 80:3000 <your-dockerhub-username>/my-node-app:latest
+                    EOF
+                    '''
+                }
+            }
+        }
+    }
+}
