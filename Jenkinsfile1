@@ -1,0 +1,41 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git 'https://github.com/Usecase.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh 'docker build -t node-app .'
+                }
+            }
+        }
+
+        stage('Deploy to AWS EC2') {
+            steps {
+                sshagent(['ec2-ssh-key']) {
+                    sh '''
+                    ssh -o StrictHostKeyChecking=no ec2-user@54.85.38.253 <<EOF
+                    docker stop node-app || true
+                    docker rm node-app || true
+                    docker rmi node-app || true
+                    EOF
+
+                    scp -o StrictHostKeyChecking=no -r . ec2-user@<EC2-Public-IP>:/home/ec2-user/node-app
+
+                    ssh -o StrictHostKeyChecking=no ec2-user@54.85.38.253 <<EOF
+                    cd /home/ec2-user/node-app
+                    docker build -t node-app .
+                    docker run -d --name node-app -p 80:3000 node-app
+                    EOF
+                    '''
+                }
+            }
+        }
+    }
+}
